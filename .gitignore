@@ -1,8 +1,25 @@
+# Build
 /build/
 /managed_components/
+.clangd
+.vscode/
+
+# ESP-IDF
 /sdkconfig
 /sdkconfig.old
+/sdkconfig.credentials
 dependencies.lock
+
+# Binarios
 *.bin
 *.elf
 *.map
+
+# CMake
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+compile_commands.json
+
+# Ninja
+.ninja*
