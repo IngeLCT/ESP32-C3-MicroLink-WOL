@@ -1,23 +1,45 @@
-menu "Wake-on-LAN endpoint"
+menu "Alexa Wake-on-LAN"
+
+    config WOL_DEVICE_NAME
+        string "Nombre inicial del dispositivo"
+        default "Encender PC"
+        help
+            Nombre descriptivo mostrado en los logs. Alexa permite cambiar el
+            nombre después del emparejamiento Matter.
 
     config WOL_TARGET_MAC
-        string "Target computer MAC address"
-        default "00:00:00:00:00:00"
-        help
-            MAC address of the computer to wake, in AA:BB:CC:DD:EE:FF format.
-
-    config WOL_SHARED_SECRET
-        string "HTTP bearer token"
+        string "MAC de la computadora"
         default ""
         help
-            Additional secret required by POST /wol. Use at least 16 random
-            characters and keep it in the git-ignored sdkconfig.credentials.
+            Dirección MAC del adaptador de red que recibirá el Magic Packet,
+            con formato AA:BB:CC:DD:EE:FF.
 
-    config WOL_HTTP_PORT
-        int "Private HTTP port"
-        default 8080
-        range 1024 65535
+    config WOL_UDP_PORT
+        int "Puerto UDP Wake-on-LAN"
+        default 9
+        range 1 65535
+
+    config WOL_REPEAT_COUNT
+        int "Cantidad de Magic Packets"
+        default 3
+        range 1 10
+
+    config WOL_REPEAT_DELAY_MS
+        int "Pausa entre paquetes (ms)"
+        default 100
+        range 0 2000
+
+    config WOL_NETWORK_WAIT_SECONDS
+        int "Espera máxima por IPv4 (s)"
+        default 20
+        range 1 120
+
+    config WOL_MOMENTARY_RESET_MS
+        int "Tiempo para regresar el interruptor a OFF (ms)"
+        default 1000
+        range 100 10000
         help
-            TCP port bound only to the MicroLink/Tailscale VPN address.
+            El dispositivo se comporta como un pulsador: Alexa lo enciende,
+            se envía Wake-on-LAN y después vuelve automáticamente a apagado.
 
 endmenu

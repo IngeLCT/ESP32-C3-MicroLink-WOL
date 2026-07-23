@@ -1,55 +1,87 @@
-# ESP32-C3 MicroLink Wake-on-LAN
+# ESP32-C3 Alexa Wake-on-LAN
 
-ESP-IDF firmware that joins a local Wi-Fi network, connects an ESP32-C3 to a
-Tailscale tailnet through MicroLink, and exposes a Wake-on-LAN HTTP endpoint
-bound only to the device's Tailscale IP.
+Firmware ESP-IDF para presentar un ESP32-C3 ante Amazon Alexa como un
+interruptor Matter y encender una computadora mediante Wake-on-LAN.
 
-## Flow
+## Flujo
 
 ```text
-iPhone / PC with Tailscale
-          |
-          | POST /wol over the private tailnet
-          v
-ESP32-C3 + MicroLink
-          |
-          | UDP Magic Packet to local subnet broadcast
-          v
-Wake-on-LAN computer
+Usuario / aplicación Alexa
+            |
+            | Orden local Matter: encender
+            v
+Echo compatible con Matter
+            |
+            | Matter sobre Wi-Fi
+            v
+ESP32-C3
+            |
+            | Magic Packet UDP
+            v
+Computadora en la red local
 ```
 
-## Important limitation
+No utiliza Tailscale, MicroLink, VPN, puertos abiertos en el router ni un
+servidor adicional. El Echo y el ESP32-C3 deben estar en una red local que
+permita tráfico entre clientes.
 
-MicroLink lists ESP32-C3 as compatible but untested. The C3 has no PSRAM, so
-this project uses the minimum 64 KiB coordination/JSON buffers and four active
-peers. This is intended for a small tailnet (roughly 30 peers or fewer). Runtime
-validation on the actual board is still required.
+## Comportamiento
 
-## Prerequisites
+- Alexa registra el dispositivo como un enchufe/interruptor Matter.
+- Al recibir `ON`, el ESP32-C3 envía tres Magic Packets al broadcast de su
+  subred por UDP/9.
+- Después vuelve automáticamente a `OFF`. Esto permite repetir el comando
+  «Alexa, enciende la computadora» aunque la orden anterior ya se haya usado.
+- Una orden `OFF` no apaga la computadora.
+- La MAC de destino se configura en `sdkconfig.credentials`.
 
-- ESP-IDF 5.0 or newer.
-- ESP32-C3 with at least 4 MiB flash.
-- A reusable Tailscale auth key. Prefer a tagged, preauthorized key restricted
-  with tailnet ACL/grants.
-- Wake-on-LAN enabled in the target computer BIOS/UEFI and operating system.
-- ESP32-C3 and target computer on the same IPv4 subnet.
+## Requisitos
 
-## Configuration
+- ESP32-C3 con al menos 4 MiB de flash.
+- ESP-IDF 5.5.x.
+- Un Echo o eero compatible con Matter configurado en Alexa.
+- Bluetooth habilitado en el teléfono durante el emparejamiento.
+- Wake-on-LAN habilitado en BIOS/UEFI y en el sistema operativo de la PC.
+- ESP32-C3 y computadora en la misma subred IPv4.
 
-Edit the tracked `sdkconfig.credentials` file and set:
+## Estado de prototipo y credenciales Matter
 
-- Wi-Fi SSID and password.
-- Tailscale auth key and device name.
-- Target computer MAC address.
-- A random bearer token with at least 16 characters.
+Este firmware usa las credenciales de atestación de desarrollo incluidas por
+ESP-Matter. Son apropiadas para desarrollo y pruebas de laboratorio, pero no
+para distribuir un producto comercial.
 
-`sdkconfig.credentials` is intentionally tracked with all sensitive values
-empty. Before every commit or push, restore the SSID, Wi-Fi password, Tailscale
-auth key, target MAC and bearer token to empty strings. The generated
-`sdkconfig` remains ignored by Git because it contains the merged values used
-by the build.
+La incorporación real con Alexa debe validarse con el modelo de Echo y la
+versión de la aplicación Alexa que se utilizarán. Para producción se requieren
+credenciales Matter propias (DAC/PAI/CD), certificación Matter y los requisitos
+de certificación aplicables de Amazon.
 
-## Build and flash
+## Configuración
+
+```bash
+cp sdkconfig.credentials.example sdkconfig.credentials
+```
+
+Edita el archivo:
+
+```ini
+CONFIG_WOL_TARGET_MAC="AA:BB:CC:DD:EE:FF"
+```
+
+También pueden ajustarse con `idf.py menuconfig`, en
+`Alexa Wake-on-LAN`:
+
+- nombre descriptivo;
+- puerto UDP;
+- cantidad de paquetes;
+- pausa entre paquetes;
+- tiempo máximo para esperar IPv4;
+- tiempo para volver automáticamente a `OFF`.
+
+Las credenciales Wi-Fi no se escriben en el firmware. Durante el alta, Alexa
+las entrega al ESP32-C3 mediante el proceso estándar de comisión Matter por
+BLE. Después quedan guardadas en NVS y el equipo se reconecta automáticamente.
+
+## Compilación y flasheo
 
 ```bash
 source /home/eduardo/tools/esp-idf/export.sh
@@ -58,59 +90,36 @@ idf.py build
 idf.py -p /dev/ttyUSB0 flash monitor
 ```
 
-After registration, note the `100.x.y.z` address printed in the serial log.
+La primera compilación descarga el componente oficial `esp_matter` desde el
+registro de componentes de Espressif.
 
-## Use from a PC
+## Alta en Alexa
 
-Health check:
+1. Flashea el firmware y abre el monitor serial.
+2. Busca en el log el código QR o el código manual de Matter.
+3. En la aplicación Alexa selecciona `Dispositivos` → `+` →
+   `Agregar dispositivo` → `Matter`.
+4. Escanea el QR o introduce el código manual.
+5. Asigna un nombre claro, por ejemplo `Computadora`.
+6. Prueba: «Alexa, enciende la computadora».
 
-```bash
-curl http://100.x.y.z:8080/health
-```
+Para repetir el alta después de haber emparejado el dispositivo, ejecuta
+`matter esp factoryreset` en la consola serial y reinicia.
 
-Send the Wake-on-LAN command:
+## Notas de red
 
-```bash
-curl -X POST \
-  -H 'Authorization: Bearer YOUR_WOL_SHARED_SECRET' \
-  http://100.x.y.z:8080/wol
-```
+- El Magic Packet se envía al broadcast dirigido calculado con la IP y máscara
+  del ESP32-C3.
+- Algunas redes de invitados o configuraciones con aislamiento de clientes
+  bloquean Matter, mDNS, multicast o el broadcast UDP.
+- Para Wake-on-LAN desde apagado completo, la tarjeta de red de la PC debe
+  permanecer energizada y configurada para aceptar el Magic Packet.
 
-Expected response:
+## Arquitectura técnica
 
-```json
-{"status":"magic_packet_sent"}
-```
-
-## Use from iPhone
-
-With Tailscale connected, create an Apple Shortcut using `Get Contents of URL`:
-
-- URL: `http://100.x.y.z:8080/wol`
-- Method: `POST`
-- Header: `Authorization`
-- Value: `Bearer YOUR_WOL_SHARED_SECRET`
-
-Keep the shortcut private because it contains the bearer token.
-
-## Security
-
-- The HTTP socket binds specifically to the MicroLink VPN address, not to the
-  Wi-Fi/LAN address.
-- `POST /wol` requires a bearer token in addition to tailnet membership.
-- Restrict access further with Tailscale ACLs/grants so only your iPhone and
-  selected PCs can reach this device and port.
-- Do not commit a populated `sdkconfig.credentials`, `sdkconfig`, auth keys,
-  Wi-Fi passwords, MAC addresses, or bearer tokens.
-
-## Endpoints
-
-- `GET /health` — confirms that the private service is running.
-- `POST /wol` — validates the bearer token and sends the Magic Packet three
-  times to UDP port 9 on the Wi-Fi subnet's directed broadcast address.
-
-## Included third-party code
-
-MicroLink and its `wireguard_lwip` dependency are vendored under `components/`
-from upstream commit `216da3300f0493b0860247d43f7af5ce29df63a5`.
-MicroLink is licensed under MIT; upstream license files are retained.
+- Integración Alexa: Matter sobre Wi-Fi mediante el componente oficial
+  `espressif/esp_matter`.
+- Tipo Matter: `On/Off Plug-in Unit`.
+- Comisión inicial: BLE.
+- Acción local: Magic Packet de 102 bytes, repetido por UDP.
+- Estado: interruptor momentáneo; `ON` dispara WOL y retorna a `OFF`.

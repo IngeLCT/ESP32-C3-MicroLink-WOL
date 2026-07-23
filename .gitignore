@@ -8,7 +8,6 @@
 /sdkconfig
 /sdkconfig.old
 /sdkconfig.credentials
-dependencies.lock
 
 # Binarios
 *.bin
