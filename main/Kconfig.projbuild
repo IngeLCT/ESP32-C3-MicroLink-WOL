@@ -1,0 +1,23 @@
+menu "Wake-on-LAN endpoint"
+
+    config WOL_TARGET_MAC
+        string "Target computer MAC address"
+        default "00:00:00:00:00:00"
+        help
+            MAC address of the computer to wake, in AA:BB:CC:DD:EE:FF format.
+
+    config WOL_SHARED_SECRET
+        string "HTTP bearer token"
+        default ""
+        help
+            Additional secret required by POST /wol. Use at least 16 random
+            characters and keep it in the git-ignored sdkconfig.credentials.
+
+    config WOL_HTTP_PORT
+        int "Private HTTP port"
+        default 8080
+        range 1024 65535
+        help
+            TCP port bound only to the MicroLink/Tailscale VPN address.
+
+endmenu
