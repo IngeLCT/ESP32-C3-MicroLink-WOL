@@ -1,5 +1,11 @@
 cmake_minimum_required(VERSION 3.16)
 
+# Este firmware solo soporta ESP32-C3. También está declarado en
+# sdkconfig.defaults para que funcione igual desde idf.py y desde IDEs.
+if(NOT DEFINED IDF_TARGET)
+    set(IDF_TARGET "esp32c3")
+endif()
+
 set(SDKCONFIG_DEFAULTS "sdkconfig.defaults")
 if(EXISTS "${CMAKE_CURRENT_LIST_DIR}/sdkconfig.credentials")
     list(APPEND SDKCONFIG_DEFAULTS "sdkconfig.credentials")

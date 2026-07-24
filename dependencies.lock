@@ -336,6 +336,6 @@ dependencies:
     version: 5.5.1
 direct_dependencies:
 - espressif/esp_matter
-manifest_hash: 45eb53f66b64cfbef53fc9dfb8e1c6454c9ab0c068cb39d13e05257794a73162
+manifest_hash: 4fbcafc7ccb734db1f9528811b76e90d931687cb2706b0831eb3de78cec5dba2
 target: esp32c3
 version: 2.0.0

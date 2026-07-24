@@ -19,6 +19,7 @@
 
 #include <app/server/CommissioningWindowManager.h>
 #include <app/server/Server.h>
+#include <platform/CHIPDeviceLayer.h>
 
 using namespace chip::app::Clusters;
 using namespace esp_matter;
@@ -124,29 +125,34 @@ esp_err_t send_magic_packet()
     return ESP_OK;
 }
 
-void return_switch_to_off()
+void return_switch_to_off(intptr_t)
 {
-    attribute_t *on_off_attribute =
-        attribute::get(wol_endpoint_id, OnOff::Id,
-                       OnOff::Attributes::OnOff::Id);
-    if (on_off_attribute == nullptr) {
-        ESP_LOGE(TAG, "No se encontró el atributo OnOff de Matter");
-        return;
-    }
+    do {
+        attribute_t *on_off_attribute =
+            attribute::get(wol_endpoint_id, OnOff::Id,
+                           OnOff::Attributes::OnOff::Id);
+        if (on_off_attribute == nullptr) {
+            ESP_LOGE(TAG, "No se encontró el atributo OnOff de Matter");
+            break;
+        }
 
-    esp_matter_attr_val_t value;
-    if (attribute::get_val(on_off_attribute, &value) != ESP_OK) {
-        ESP_LOGE(TAG, "No se pudo leer el estado del interruptor Matter");
-        return;
-    }
+        esp_matter_attr_val_t value;
+        if (attribute::get_val(on_off_attribute, &value) != ESP_OK) {
+            ESP_LOGE(TAG, "No se pudo leer el estado del interruptor Matter");
+            break;
+        }
 
-    value.val.b = false;
-    esp_err_t err = attribute::update(wol_endpoint_id, OnOff::Id,
-                                      OnOff::Attributes::OnOff::Id, &value);
-    if (err != ESP_OK) {
-        ESP_LOGE(TAG, "No se pudo devolver el interruptor a OFF: %s",
-                 esp_err_to_name(err));
-    }
+        value.val.b = false;
+        esp_err_t err = attribute::update(
+            wol_endpoint_id, OnOff::Id,
+            OnOff::Attributes::OnOff::Id, &value);
+        if (err != ESP_OK) {
+            ESP_LOGE(TAG, "No se pudo devolver el interruptor a OFF: %s",
+                     esp_err_to_name(err));
+        }
+    } while (false);
+
+    wol_task_running.store(false);
 }
 
 void wol_task(void *)
@@ -169,8 +175,15 @@ void wol_task(void *)
     }
 
     vTaskDelay(pdMS_TO_TICKS(CONFIG_WOL_MOMENTARY_RESET_MS));
-    return_switch_to_off();
-    wol_task_running.store(false);
+    CHIP_ERROR schedule_result =
+        chip::DeviceLayer::PlatformMgr().ScheduleWork(
+            return_switch_to_off, static_cast<intptr_t>(0));
+    if (schedule_result != CHIP_NO_ERROR) {
+        ESP_LOGE(TAG,
+                 "No se pudo programar el retorno a OFF en el hilo Matter: %s",
+                 schedule_result.AsString());
+        wol_task_running.store(false);
+    }
     vTaskDelete(nullptr);
 }
 
@@ -320,8 +333,11 @@ extern "C" void app_main()
     }
 
 #if CONFIG_ENABLE_CHIP_SHELL
-    esp_matter::console::diagnostics_register_commands();
-    esp_matter::console::wifi_register_commands();
-    esp_matter::console::init();
+    ESP_ERROR_CHECK(
+        esp_matter::console::diagnostics_register_commands());
+    ESP_ERROR_CHECK(esp_matter::console::wifi_register_commands());
+    ESP_ERROR_CHECK(
+        esp_matter::console::factoryreset_register_commands());
+    ESP_ERROR_CHECK(esp_matter::console::init());
 #endif
 }

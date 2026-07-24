@@ -106,6 +106,41 @@ registro de componentes de Espressif.
 Para repetir el alta después de haber emparejado el dispositivo, ejecuta
 `matter esp factoryreset` en la consola serial y reinicia.
 
+El firmware registra explícitamente ese comando mediante
+`factoryreset_register_commands()`. El restablecimiento borra la configuración
+Matter y reinicia el dispositivo.
+
+## Compilación en Windows y selección del target
+
+Abre una terminal **ESP-IDF PowerShell**, no una consola PowerShell normal, y
+ejecuta desde la carpeta principal del proyecto:
+
+```powershell
+idf.py set-target esp32c3
+idf.py reconfigure
+idf.py build
+```
+
+El proyecto declara `esp32c3` en tres lugares para que no dependa del selector
+gráfico del IDE:
+
+- `CMakeLists.txt`, como target predeterminado de CMake;
+- `sdkconfig.defaults`, mediante `CONFIG_IDF_TARGET="esp32c3"`;
+- `main/idf_component.yml`, como único target compatible.
+
+Si una configuración anterior dejó el proyecto fijado a otro chip, limpia solo
+los archivos generados y vuelve a configurar:
+
+```powershell
+Remove-Item -Recurse -Force .\build -ErrorAction SilentlyContinue
+Remove-Item .\sdkconfig, .\sdkconfig.old -ErrorAction SilentlyContinue
+idf.py set-target esp32c3
+idf.py reconfigure
+idf.py build
+```
+
+No borres `sdkconfig.credentials`, ya que ahí está la MAC objetivo.
+
 ## Notas de red
 
 - El Magic Packet se envía al broadcast dirigido calculado con la IP y máscara
@@ -123,3 +158,5 @@ Para repetir el alta después de haber emparejado el dispositivo, ejecuta
 - Comisión inicial: BLE.
 - Acción local: Magic Packet de 102 bytes, repetido por UDP.
 - Estado: interruptor momentáneo; `ON` dispara WOL y retorna a `OFF`.
+- Seguridad de concurrencia: el retorno del atributo `OnOff` se programa en el
+  hilo Matter mediante `PlatformMgr().ScheduleWork()`.
